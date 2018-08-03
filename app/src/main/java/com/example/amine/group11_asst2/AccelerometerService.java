@@ -75,7 +75,7 @@ public class AccelerometerService extends Service implements SensorEventListener
         }
 //id INTEGER PRIMARY KEY AUTOINCREMENT,
         db.execSQL("CREATE TABLE IF NOT EXISTS "+ table_name + "(Timestamp INTEGER," +
-                "XVal REAL," +
+                "XVAL REAL," +
                 "YVAL REAL," +
                 "ZVAL REAL )");
         return START_NOT_STICKY;

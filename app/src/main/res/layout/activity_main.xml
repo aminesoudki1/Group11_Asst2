@@ -178,7 +178,7 @@
 
                 <com.jjoe64.graphview.GraphView
                     android:layout_width="match_parent"
-                    android:layout_height="200dip"
+                    android:layout_height="180dip"
                     android:id="@+id/gv_graph" />
 
             </LinearLayout>

@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Color;
 import android.os.AsyncTask;
@@ -111,7 +112,6 @@ public class MainActivity extends AppCompatActivity  {
         graph.getViewport().setScalable(true); // enables horizontal zooming and scrolling
         graph.getViewport().setScalableY(true); // enables vertical zooming and scrolling
 
-
         graph.getViewport().setXAxisBoundsManual(true);
         graph.getViewport().setMinX(0);
 
@@ -171,7 +171,14 @@ public class MainActivity extends AppCompatActivity  {
             et_patient_id.setEnabled(false);
             rb_male.setEnabled(false);
             rb_female.setEnabled(false);
+            bt_download.setEnabled(false);
+            bt_upload.setEnabled(false);
+            if(graph.getSeries().size()==0) {
 
+                graph.addSeries(xvalues);
+                graph.addSeries(yvalues);
+                graph.addSeries(zvalues);
+            }
             String table_name = et_patient_name.getText().toString()+""+et_patient_id.getText().toString()+""+et_age.getText().toString();
             if(rb_male.isChecked()) {
                 table_name = table_name+"male";
@@ -188,12 +195,16 @@ public class MainActivity extends AppCompatActivity  {
     public void stop() {
         if(t!=null) {
             Log.d("MainActivity Stop", stopService(t) + "");
+
         }
+        graph.removeAllSeries();
         et_age.setEnabled(true);
         et_patient_name.setEnabled(true);
         et_patient_id.setEnabled(true);
         rb_male.setEnabled(true);
         rb_female.setEnabled(true);
+        bt_download.setEnabled(true);
+        bt_upload.setEnabled(true);
 
     }
 
@@ -237,10 +248,12 @@ public class MainActivity extends AppCompatActivity  {
     public void downloadFromServer() {
         DownloadFile downloadFile = new DownloadFile();
         downloadFile.execute("http://impact.asu.edu/CSE535Spring18Folder/group11_asst2.db"
-                ,this.getDatabasePath("CSE535_ASSIGNMENT2").getParent() + "CSE535_ASSIGNMENT2_DOWN");
-    }
-    private static class DownloadFile extends AsyncTask<String,Integer,String> {
+                ,this.getDatabasePath("CSE535_ASSIGNMENT2").getParent() + "/CSE535_ASSIGNMENT2_DOWN.db");
 
+
+    }
+    private class DownloadFile extends AsyncTask<String,Integer,String> {
+        int serverResponseCode;
         @Override
         protected String doInBackground(String... strings) {
             InputStream input = null;
@@ -284,6 +297,7 @@ public class MainActivity extends AppCompatActivity  {
                 if (connection.getResponseCode() != HttpsURLConnection.HTTP_OK) {
                     Log.d("download",connection.getResponseCode() + " " +connection.getResponseMessage());
                 }
+                serverResponseCode = connection.getResponseCode();
 
                 // this will be useful to display download percentage
                 // might be -1: server did not report the length
@@ -307,7 +321,7 @@ public class MainActivity extends AppCompatActivity  {
                     total += count;
                     // publishing the progress....
                     if (fileLength > 0) // only if total length is known
-                        publishProgress((int) (total * 100 / fileLength));
+                        publishProgress(count,(int)total);
                     output.write(data, 0, count);
                 }
             } catch (Exception e) {
@@ -326,6 +340,55 @@ public class MainActivity extends AppCompatActivity  {
             }
 
             return null;
+        }
+
+        @Override
+        protected void onPreExecute() {
+            tv_progress.setText("Preparing to Download");
+        }
+
+        @Override
+        protected void onProgressUpdate(Integer... values) {
+            tv_progress.setText("Downloading " + values[0] +" out of " + values[1]);
+        }
+
+        @Override
+        protected void onPostExecute(String s) {
+            if(serverResponseCode==200) {
+                Toast.makeText(MainActivity.this, "Download Complete", Toast.LENGTH_LONG).show();
+                tv_progress.setText("");
+                DBHelper db = new DBHelper(getApplicationContext(),"CSE535_ASSIGNMENT2_DOWN.db","");
+                SQLiteDatabase sqLiteDatabase = db.getReadableDatabase();
+                Cursor c = sqLiteDatabase.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name!= 'android_metadata'",null);
+                Log.e("table",c.getPosition()+"");
+                if (c.moveToFirst()) {
+                    //Update UI
+                    String table_name = c.getString(c.getColumnIndex("name"));
+                    Cursor d = sqLiteDatabase.rawQuery("SELECT * FROM" + " " + table_name +" LIMIT 10",null );
+
+
+                    xvalues.clearCursorModeCache();
+                    yvalues.clearCursorModeCache();
+                    zvalues.clearCursorModeCache();
+                    if(d.moveToFirst()) {
+                        while(!d.isAfterLast()) {
+                            int timestamp = d.getInt(d.getColumnIndex("Timestamp"));
+                            float x = d.getFloat(d.getColumnIndex("XVAL"));
+                            float y = d.getFloat(d.getColumnIndex("YVAL"));
+                            float z = d.getFloat(d.getColumnIndex("ZVAL"));
+                            xvalues.appendData(new DataPoint(timestamp,x),true,1000);
+                            yvalues.appendData(new DataPoint(timestamp,y),true,1000);
+                            zvalues.appendData(new DataPoint(timestamp,z),true,1000);
+
+                            Log.e("table",x+" "+y+" "+ z);
+                            d.moveToNext();
+                        }
+                    }
+                }
+
+            } else if(serverResponseCode==404){
+                tv_progress.setText("File Not Found");
+            }
         }
     }
     private class UploadFile extends AsyncTask<String,Integer,String> {
@@ -411,7 +474,8 @@ public class MainActivity extends AppCompatActivity  {
                 Log.e("Upload file to server", "error: " + ex.getMessage(), ex);
             } catch (Exception e) {
                 e.printStackTrace();
-
+                Log.e("Upload file to server", "error" + serverResponseCode);
+                tv_progress.setText("Create Database First");
 
             }
             return null;
@@ -428,6 +492,8 @@ public class MainActivity extends AppCompatActivity  {
             if(serverResponseCode==200) {
                 Toast.makeText(MainActivity.this, "Uploaded Successfully", Toast.LENGTH_LONG).show();
                 tv_progress.setText("");
+            } else {
+                Toast.makeText(getApplicationContext(),"Something Went Wrong!",Toast.LENGTH_SHORT);
             }
         }
 
