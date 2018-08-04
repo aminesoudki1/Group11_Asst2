@@ -91,7 +91,7 @@ public class AccelerometerService extends Service implements SensorEventListener
             startTime  = System.currentTimeMillis();
 
             ContentValues values = new ContentValues();
-            timestamp = timestamp + 1;
+
             float x= event.values[0];
             float y = event.values[1];
             float z = event.values[2];
@@ -100,11 +100,12 @@ public class AccelerometerService extends Service implements SensorEventListener
             values.put("ZVAL", z);
             values.put("TIMESTAMP", timestamp);
 
+
 // Insert the new row, returning the primary key value of the new row
             long newRowId = db.insert(table_name, null, values);
             Log.e("NEWINSERT", newRowId+" " + timestamp + " ("+ x + " " + y + " " +z +")");
             sendMessage(timestamp,x,y,z);
-
+            timestamp = timestamp + 1;
         }
 
     }

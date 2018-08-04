@@ -16,6 +16,8 @@ import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.widget.Button;
 import android.widget.EditText;
@@ -102,6 +104,7 @@ public class MainActivity extends AppCompatActivity  {
     LineGraphSeries zvalues;
     int timestamp = 0;
     boolean running = false;
+    boolean userChanged = false;
     Intent t;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -109,6 +112,45 @@ public class MainActivity extends AppCompatActivity  {
         setContentView(R.layout.activity_main);
         ButterKnife.bind(this);
         Stetho.initializeWithDefaults(this);
+
+        initGraph();
+        TextWatcher textWatcher = new TextWatcher() {
+            CharSequence charSequence;
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                charSequence = s;
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                if(!s.equals(charSequence)) {
+                    userChanged = true;
+                }
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+
+            }
+        };
+        rg_sex.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(RadioGroup group, int checkedId) {
+                RadioButton checkedRadioButton = (RadioButton) group.findViewById(checkedId);
+                // This puts the value (true/false) into the variable
+                boolean isChecked = checkedRadioButton.isChecked();
+                // If the radiobutton that has changed in check state is now checked...
+                if (isChecked)
+                {
+                    userChanged = true;
+                }
+            }
+        });
+        et_age.addTextChangedListener(textWatcher);
+        et_patient_id.addTextChangedListener(textWatcher);
+        et_patient_name.addTextChangedListener(textWatcher);
+    }
+    public void initGraph() {
         graph.getViewport().setScalable(true); // enables horizontal zooming and scrolling
         graph.getViewport().setScalableY(true); // enables vertical zooming and scrolling
 
@@ -130,9 +172,7 @@ public class MainActivity extends AppCompatActivity  {
         graph.addSeries(xvalues);
         graph.addSeries(yvalues);
         graph.addSeries(zvalues);
-
     }
-
     @Override
     protected void onResume() {
         LocalBroadcastManager.getInstance(this).registerReceiver(
@@ -150,6 +190,7 @@ public class MainActivity extends AppCompatActivity  {
 
     @OnClick(R.id.bt_run)
     public void run() {
+
         if(((et_age.getText().toString().isEmpty() || et_patient_id.getText().toString().isEmpty() ||
                 et_patient_name.getText().toString().isEmpty()) || (!rb_female.isChecked() &&
                 !rb_male.isChecked())) && !running) {
@@ -165,6 +206,7 @@ public class MainActivity extends AppCompatActivity  {
                     });
             alertDialog.show();
         }
+
         else if(!running) {
             et_age.setEnabled(false);
             et_patient_name.setEnabled(false);
@@ -173,6 +215,12 @@ public class MainActivity extends AppCompatActivity  {
             rb_female.setEnabled(false);
             bt_download.setEnabled(false);
             bt_upload.setEnabled(false);
+            if(userChanged) {
+                graph.removeAllSeries();
+                initGraph();
+                userChanged = false;
+                timestamp = 0;
+            }
             if(graph.getSeries().size()==0) {
 
                 graph.addSeries(xvalues);
@@ -366,10 +414,9 @@ public class MainActivity extends AppCompatActivity  {
                     String table_name = c.getString(c.getColumnIndex("name"));
                     Cursor d = sqLiteDatabase.rawQuery("SELECT * FROM" + " " + table_name +" LIMIT 10",null );
 
-
-                    xvalues.clearCursorModeCache();
-                    yvalues.clearCursorModeCache();
-                    zvalues.clearCursorModeCache();
+                    graph.removeAllSeries();
+                    initGraph(); //reset graph
+                    userChanged = true;
                     if(d.moveToFirst()) {
                         while(!d.isAfterLast()) {
                             int timestamp = d.getInt(d.getColumnIndex("Timestamp"));
@@ -379,7 +426,6 @@ public class MainActivity extends AppCompatActivity  {
                             xvalues.appendData(new DataPoint(timestamp,x),true,1000);
                             yvalues.appendData(new DataPoint(timestamp,y),true,1000);
                             zvalues.appendData(new DataPoint(timestamp,z),true,1000);
-
                             Log.e("table",x+" "+y+" "+ z);
                             d.moveToNext();
                         }
