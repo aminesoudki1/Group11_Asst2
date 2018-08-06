@@ -69,7 +69,7 @@ public class AccelerometerService extends Service implements SensorEventListener
         if(intent.hasExtra(TIMESTAMP_TO_SERVICE)) {
             timestamp = intent.getIntExtra(TIMESTAMP_TO_SERVICE,0);
         }
-        //timestamp is 0 so we are running a new instance of the app
+        //timestamp is 0 so we are running a new instance of the app or user has been changed
         if(timestamp == 0) {
             db.execSQL("DROP TABLE IF EXISTS " + table_name);
         }
@@ -78,13 +78,14 @@ public class AccelerometerService extends Service implements SensorEventListener
                 "XVAL REAL," +
                 "YVAL REAL," +
                 "ZVAL REAL )");
+        //if their enough memory, system will kill service and not restart because of start not sticky.
         return START_NOT_STICKY;
     }
 
     @Override
     public void onSensorChanged(SensorEvent event) {
         long millis = System.currentTimeMillis() - startTime;
-
+        //record data every second.
         if(millis>1000) {
 
             Log.d("time",millis+"");
@@ -104,8 +105,9 @@ public class AccelerometerService extends Service implements SensorEventListener
 // Insert the new row, returning the primary key value of the new row
             long newRowId = db.insert(table_name, null, values);
             Log.e("NEWINSERT", newRowId+" " + timestamp + " ("+ x + " " + y + " " +z +")");
+            //sendmessage back to main activity to update the UI
             sendMessage(timestamp,x,y,z);
-            timestamp = timestamp + 1;
+            timestamp = timestamp + 1; //update timestamp
         }
 
     }
@@ -118,17 +120,19 @@ public class AccelerometerService extends Service implements SensorEventListener
     private void sendMessage(int timestamp , float x ,float y ,float z) {
         Log.d("sender", "Broadcasting message");
         Intent intent = new Intent("UPDATEUI");
-        // You can also include some extra data.
+        //send back x y z and timestamp to the UI
         intent.putExtra("TIMESTAMP", timestamp);
         intent.putExtra("X", x);
         intent.putExtra("Y", y);
         intent.putExtra("Z", z);
+        //local broadcast sent back to main activity to update UI
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
     }
 
 
     @Override
     public void onDestroy() {
+        //unregister sensor manager stop receiving sensor updates
         mSensorManager.unregisterListener(this,mSensor);
         super.onDestroy();
     }

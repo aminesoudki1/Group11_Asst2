@@ -99,9 +99,11 @@ public class MainActivity extends AppCompatActivity  {
     @BindView(R.id.gv_graph)
     GraphView graph;
 
+    //accelerometer x,y,z values stored in lineseries
     LineGraphSeries xvalues;
     LineGraphSeries yvalues;
     LineGraphSeries zvalues;
+    //timestamp
     int timestamp = 0;
     boolean running = false;
     boolean userChanged = false;
@@ -110,10 +112,11 @@ public class MainActivity extends AppCompatActivity  {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        ButterKnife.bind(this);
-        Stetho.initializeWithDefaults(this);
+        ButterKnife.bind(this); //bind xml to activity
+        Stetho.initializeWithDefaults(this); //so we can check databases in the browser
 
         initGraph();
+        //detecting if any of the inputs have been changed, then we detected a user change
         TextWatcher textWatcher = new TextWatcher() {
             CharSequence charSequence;
             @Override
@@ -151,6 +154,7 @@ public class MainActivity extends AppCompatActivity  {
         et_patient_name.addTextChangedListener(textWatcher);
     }
     public void initGraph() {
+        //initialize the graph by setting the legend and colors of the line series
         graph.getViewport().setScalable(true); // enables horizontal zooming and scrolling
         graph.getViewport().setScalableY(true); // enables vertical zooming and scrolling
 
@@ -175,6 +179,7 @@ public class MainActivity extends AppCompatActivity  {
     }
     @Override
     protected void onResume() {
+        //registering local broadcast receiver to receive updates from the accelerometer service
         LocalBroadcastManager.getInstance(this).registerReceiver(
                 mMessageReceiver, new IntentFilter("UPDATEUI"));
         super.onResume();
@@ -182,6 +187,7 @@ public class MainActivity extends AppCompatActivity  {
 
     @Override
     protected void onPause() {
+        //unregistering local broadcast receiver
         LocalBroadcastManager.getInstance(this).unregisterReceiver(
                 mMessageReceiver);
         super.onPause();
@@ -191,6 +197,7 @@ public class MainActivity extends AppCompatActivity  {
     @OnClick(R.id.bt_run)
     public void run() {
 
+        //if no input is detected, prompt the user to input the 4 fields
         if(((et_age.getText().toString().isEmpty() || et_patient_id.getText().toString().isEmpty() ||
                 et_patient_name.getText().toString().isEmpty()) || (!rb_female.isChecked() &&
                 !rb_male.isChecked())) && !running) {
@@ -233,6 +240,7 @@ public class MainActivity extends AppCompatActivity  {
             } else if(rb_female.isChecked()) {
                 table_name = table_name +"female";
             }
+            //send the table name and timestamp to the acceleromter service to start recording accelerometer data
             t = new Intent(this,AccelerometerService.class);
             t.putExtra(TABLE_NAME,table_name);
             t.putExtra(TIMESTAMP_TO_SERVICE,timestamp);
@@ -259,8 +267,8 @@ public class MainActivity extends AppCompatActivity  {
     private BroadcastReceiver mMessageReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            // TODO Auto-generated method stub
             // Get extra data included in the Intent
+            //update UI
             float x =0,y=0,z=0;
 
             if(intent.hasExtra("X")) {
@@ -288,12 +296,14 @@ public class MainActivity extends AppCompatActivity  {
 
     @OnClick(R.id.bt_upload)
     public void uploadToServer() {
+        //Uploading database
         UploadFile uploadFile = new UploadFile();
         uploadFile.execute(this.getDatabasePath("CSE535_ASSIGNMENT2").getPath());
     }
 
     @OnClick(R.id.bt_download)
     public void downloadFromServer() {
+        //downloading database
         DownloadFile downloadFile = new DownloadFile();
         downloadFile.execute("http://impact.asu.edu/CSE535Spring18Folder/group11_asst2.db"
                 ,this.getDatabasePath("CSE535_ASSIGNMENT2").getParent() + "/CSE535_ASSIGNMENT2_DOWN.db");
@@ -307,6 +317,9 @@ public class MainActivity extends AppCompatActivity  {
             InputStream input = null;
             OutputStream output = null;
             HttpURLConnection connection = null;
+            //trust manager is not used because impact lab has not implemented any https connection
+            //http connection will be used instead of https
+            //-----------------------------------------------------------------------
             /*TrustManager[] trustAllCerts = new TrustManager[] { new X509TrustManager() {
                 public X509Certificate[] getAcceptedIssuers() {
                     return null;
@@ -334,8 +347,9 @@ public class MainActivity extends AppCompatActivity  {
             } catch (NoSuchAlgorithmException e) {
                 e.printStackTrace();
             }*/
+            //-------------------------------------------------------------------------------
             try {
-                URL url = new URL(strings[0]);
+                URL url = new URL(strings[0]); //connect to impact lab
                 connection = (HttpURLConnection) url.openConnection();
 
                 connection.connect();
@@ -346,30 +360,24 @@ public class MainActivity extends AppCompatActivity  {
                     Log.d("download",connection.getResponseCode() + " " +connection.getResponseMessage());
                 }
                 serverResponseCode = connection.getResponseCode();
+                int fileLength = connection.getContentLength(); //get file to download
 
-                // this will be useful to display download percentage
-                // might be -1: server did not report the length
-                int fileLength = connection.getContentLength();
-
-                //downloadButton.setText(Integer.toString(fileLength));
-                // download the file
                 input = connection.getInputStream();
                 Log.d("download",strings[1] + " " +fileLength);
                 output = new FileOutputStream(strings[1]);
-                //downloadButton.setText("Connecting .....");
                 byte data[] = new byte[4096];
                 long total = 0;
                 int count;
-                while ((count = input.read(data)) != -1) {
-                    // allow canceling with back button
+                while ((count = input.read(data)) != -1) { //while there is more content to read continue reading
+
                     if (isCancelled()) {
                         input.close();
                         return null;
                     }
                     total += count;
                     // publishing the progress....
-                    if (fileLength > 0) // only if total length is known
-                        publishProgress(count,(int)total);
+                    if (fileLength > 0)
+                        publishProgress((int) total,fileLength);
                     output.write(data, 0, count);
                 }
             } catch (Exception e) {
@@ -392,32 +400,42 @@ public class MainActivity extends AppCompatActivity  {
 
         @Override
         protected void onPreExecute() {
+            //before execution UI update
             tv_progress.setText("Preparing to Download");
         }
 
         @Override
         protected void onProgressUpdate(Integer... values) {
+            //during execution
             tv_progress.setText("Downloading " + values[0] +" out of " + values[1]);
         }
 
         @Override
         protected void onPostExecute(String s) {
+
+            //after execution
+            //if the response is 200 meaning everything was OK
             if(serverResponseCode==200) {
                 Toast.makeText(MainActivity.this, "Download Complete", Toast.LENGTH_LONG).show();
                 tv_progress.setText("");
+                //open newly downloaded database
                 DBHelper db = new DBHelper(getApplicationContext(),"CSE535_ASSIGNMENT2_DOWN.db","");
+
                 SQLiteDatabase sqLiteDatabase = db.getReadableDatabase();
+                //get all tables from that database
                 Cursor c = sqLiteDatabase.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name!= 'android_metadata'",null);
                 Log.e("table",c.getPosition()+"");
                 if (c.moveToFirst()) {
-                    //Update UI
+                    //get the first table and plot the first 10 sec
                     String table_name = c.getString(c.getColumnIndex("name"));
+
                     Cursor d = sqLiteDatabase.rawQuery("SELECT * FROM" + " " + table_name +" LIMIT 10",null );
 
                     graph.removeAllSeries();
                     initGraph(); //reset graph
                     userChanged = true;
                     if(d.moveToFirst()) {
+                        //iterate over the values queried from the database and plot them in the graph
                         while(!d.isAfterLast()) {
                             int timestamp = d.getInt(d.getColumnIndex("Timestamp"));
                             float x = d.getFloat(d.getColumnIndex("XVAL"));
@@ -431,8 +449,10 @@ public class MainActivity extends AppCompatActivity  {
                         }
                     }
                 }
+            }
 
-            } else if(serverResponseCode==404){
+            //if the file is not found, alert the user
+            else if(serverResponseCode==404){
                 tv_progress.setText("File Not Found");
             }
         }
@@ -464,12 +484,15 @@ public class MainActivity extends AppCompatActivity  {
                 conn.setDoOutput(true); // Allow Outputs
                 conn.setUseCaches(false); // Don't use a Cached Copy
                 conn.setRequestMethod("POST");
+                //connection properties set as per POST operation
                 conn.setRequestProperty("Connection", "Keep-Alive");
                 conn.setRequestProperty("ENCTYPE", "multipart/form-data");
                 conn.setRequestProperty("Content-Type", "multipart/form-data;boundary=" + boundary);
+                //uploaded file required by UploadtoServer.php script
                 conn.setRequestProperty("uploaded_file", fileName);
 
                 dos = new DataOutputStream(conn.getOutputStream());
+
 
                 dos.writeBytes(twoHyphens + boundary + lineEnd);
                 dos.writeBytes("Content-Disposition: form-data; name=\"uploaded_file\";filename=\"group11_asst2.db" + "\"" + lineEnd);
@@ -487,6 +510,7 @@ public class MainActivity extends AppCompatActivity  {
 
                 while (bytesRead > 0) {
 
+                    //while file has been fully read and sent, read data and send to impact lab
                     dos.write(buffer, 0, bufferSize);
                     bytesAvailable = fileInputStream.available();
                     publishProgress(bytesAvailable,filesize);
@@ -498,6 +522,7 @@ public class MainActivity extends AppCompatActivity  {
                 // send multipart form data necesssary after file data...
                 dos.writeBytes(lineEnd);
                 dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd);
+                //show progress to user (x out of y bytes uploaded)
                 publishProgress(0,filesize);
                 // Responses from the server (code and message)
                 serverResponseCode = conn.getResponseCode();
@@ -529,7 +554,7 @@ public class MainActivity extends AppCompatActivity  {
 
         @Override
         protected void onPreExecute() {
-            //upload button will change text to reflect progress
+            //progress text change (UI update)
             tv_progress.setText("Uploading...");
         }
         @Override
